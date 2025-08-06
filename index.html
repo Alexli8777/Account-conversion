@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel檔案處理系統</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* CSS styles from user-provided code */
+        body {
+            font-family: 'Microsoft JhengHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .upload-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .upload-box {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .file-input {
+            display: none;
+        }
+        .file-label {
+            display: inline-block;
+            padding: 15px 30px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 10px;
+            color: #333;
+        }
+        .process-btn {
+            display: block;
+            width: 200px;
+            margin: 30px auto;
+            padding: 15px 30px;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        .download-section {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 15px;
+        }
+        .download-btn {
+            display: inline-block;
+            padding: 15px 40px;
+            background: linear-gradient(45deg, #00d2ff, #3a7bd5);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Excel檔案處理系統</h1>
+        <div class="upload-section">
+            <div class="upload-box">
+                <h3>📄 來源檔案</h3>
+                <input type="file" id="sourceFile" class="file-input" accept=".xlsx,.xls">
+                <label for="sourceFile" class="file-label">選擇來源檔案</label>
+                <div id="sourceInfo" class="file-info" style="display: none;"></div>
+            </div>
+            <div class="upload-box">
+                <h3>🎯 目標檔案</h3>
+                <input type="file" id="targetFile" class="file-input" accept=".xlsx,.xls">
+                <label for="targetFile" class="file-label">選擇目標檔案</label>
+                <div id="targetInfo" class="file-info" style="display: none;"></div>
+            </div>
+        </div>
+        <button id="processBtn" class="process-btn" disabled>🚀 開始處理檔案</button>
+        <div id="status" class="status" style="display: none;"></div>
+        <div id="downloadSection" class="download-section" style="display: none;"></div>
+    </div>
+    <script>
+        let sourceData = null;
+        let targetData = null;
+        let sourceFileName = '';
+        let targetFileName = '';
+        const sourceFileInput = document.getElementById('sourceFile');
+        const targetFileInput = document.getElementById('targetFile');
+        const processBtn = document.getElementById('processBtn');
+        const status = document.getElementById('status');
+        const downloadSection = document.getElementById('downloadSection');
+
+        function showStatus(message, type = 'processing') {
+            status.textContent = message;
+            status.className = 'status ' + type;
+            status.style.display = 'block';
+        }
+
+        function hideStatus() {
+            status.style.display = 'none';
+        }
+
+        function checkFilesReady() {
+            if (sourceData && targetData) {
+                processBtn.disabled = false;
+                processBtn.textContent = '🚀 開始處理檔案';
+            } else {
+                processBtn.disabled = true;
+                processBtn.textContent = '請先選擇檔案';
+            }
+        }
+
+        function readExcelFile(file, callback) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = e.target.result;
+                    const workbook = XLSX.read(data, {type: 'binary'});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1, raw: false});
+                    callback(jsonData, null);
+                } catch (error) {
+                    callback(null, '讀取檔案失敗: ' + error.message);
+                }
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        sourceFileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                sourceFileName = file.name;
+                showStatus('正在讀取來源檔案...', 'processing');
+                readExcelFile(file, function(data, error) {
+                    if (error) {
+                        showStatus(error, 'error');
+                        sourceData = null;
+                    } else {
+                        sourceData = data;
+                        document.getElementById('sourceInfo').innerHTML = '<strong>✅ ' + file.name + '</strong><br>共 ' + data.length + ' 行資料';
+                        document.getElementById('sourceInfo').style.display = 'block';
+                        showStatus('來源檔案讀取成功！', 'success');
+                        setTimeout(hideStatus, 2000);
+                    }
+                    checkFilesReady();
+                });
+            }
+        });
+
+        targetFileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                targetFileName = file.name;
+                showStatus('正在讀取目標檔案...', 'processing');
+                readExcelFile(file, function(data, error) {
+                    if (error) {
+                        showStatus(error, 'error');
+                        targetData = null;
+                    } else {
+                        targetData = data;
+                        document.getElementById('targetInfo').innerHTML = '<strong>✅ ' + file.name + '</strong><br>共 ' + data.length + ' 行資料';
+                        document.getElementById('targetInfo').style.display = 'block';
+                        showStatus('目標檔案讀取成功！', 'success');
+                        setTimeout(hideStatus, 2000);
+                    }
+                    checkFilesReady();
+                });
+            }
+        });
+
+        function getColumnValue(row, colIndex) {
+            return row[colIndex] || '';
+        }
+
+        function s2ab(s) {
+            const buf = new ArrayBuffer(s.length);
+            const view = new Uint8Array(buf);
+            for (let i = 0; i < s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+            return buf;
+        }
+
+        function processFiles() {
+            if (!sourceData || !targetData) {
+                showStatus('請先選擇兩個檔案', 'error');
+                return;
+            }
+
+            showStatus('正在處理檔案資料...', 'processing');
+            try {
+                const negativeData = {};
+                for (let i = 5; i < sourceData.length; i++) {
+                    const row = sourceData[i];
+                    if (!row || row.length === 0) continue;
+                    let aValue = getColumnValue(row, 0).toString();
+                    const match = aValue.match(/\d{1,7}/);
+                    const ivrCode = match ? match[0].substring(0, 7) : '';
+                    const qValue = getColumnValue(row, 16);
+                    const qNumber = parseFloat(qValue) || 0;
+                    if (qNumber < 0 && ivrCode) {
+                        negativeData[ivrCode] = qNumber;
+                    }
+                }
+
+                const resultData = targetData.map(row => [...row]);
+                let matchCount = 0;
+                for (let i = 0; i < resultData.length; i++) {
+                    const row = resultData[i];
+                    if (!row || row.length === 0) continue;
+                    let targetIvrCode = getColumnValue(row, 0).toString();
+                    const match = targetIvrCode.match(/\d{1,7}/);
+                    const cleanIvrCode = match ? match[0].substring(0, 7) : '';
+                    if (cleanIvrCode && negativeData.hasOwnProperty(cleanIvrCode)) {
+                        while (row.length <= 4) row.push('');
+                        row[4] = negativeData[cleanIvrCode];
+                        matchCount++;
+                    }
+                }
+
+                const newWorkbook = XLSX.utils.book_new();
+                const newWorksheet = XLSX.utils.aoa_to_sheet(resultData);
+                XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'ProcessedData');
+                const wbout = XLSX.write(newWorkbook, {bookType: 'xlsx', type: 'binary'});
+                const blob = new Blob([s2ab(wbout)], {type: 'application/octet-stream'});
+                const url = URL.createObjectURL(blob);
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = 'processed_' + targetFileName;
+                downloadLink.className = 'download-btn';
+                downloadLink.textContent = '下載處理結果 (已匹配 ' + matchCount + ' 筆資料)';
+                downloadSection.innerHTML = '<h3>✅ 處理完成！</h3><p>成功處理檔案，共匹配 <strong>' + matchCount + '</strong> 筆負數資料</p><p>找到 <strong>' + Object.keys(negativeData).length + '</strong> 筆來源負數資料</p>';
+                downloadSection.appendChild(downloadLink);
+                downloadSection.style.display = 'block';
+                showStatus('處理完成！共匹配 ' + matchCount + ' 筆資料', 'success');
+            } catch (error) {
+                console.error('處理錯誤:', error);
+                showStatus('處理失敗: ' + error.message, 'error');
+            }
+        }
+
+        processBtn.addEventListener('click', processFiles);
+    </script>
+</body>
+</html>
